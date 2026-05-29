@@ -9,6 +9,12 @@ services:
     restart: always
     ports:
       - "5000:5000"
+      - "443:443"
     environment:
-      - PORT=5000
+      - PORT=443
       - NODE_ENV=production
+      - SSL_KEY_PATH=/etc/ssl/estima/privkey.pem
+      - SSL_CERT_PATH=/etc/ssl/estima/fullchain.pem
+    volumes:
+      # Mount your SSL certificate directory on the host to the container (e.g. Let's Encrypt live path)
+      - /etc/letsencrypt/live/estima.io:/etc/ssl/estima:ro

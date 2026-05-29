@@ -1,15 +1,45 @@
 import express from 'express';
 import http from 'http';
+import https from 'https';
+import fs from 'fs';
 import { Server, Socket } from 'socket.io';
 import cors from 'cors';
+import helmet from 'helmet';
 import { RoomState, Participant, VoteSummary } from './types';
 import path from 'path';
 
 const app = express();
+
+// Secure application by setting various HTTP headers
+app.use(helmet({
+  contentSecurityPolicy: false, // Turned off to allow websocket connections and static assets cleanly
+}));
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-const server = http.createServer(app);
+// Load SSL configuration if paths are provided
+const sslKeyPath = process.env.SSL_KEY_PATH;
+const sslCertPath = process.env.SSL_CERT_PATH;
+const isHttpsConfigured = !!(sslKeyPath && sslCertPath && fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath));
+
+let server: http.Server | https.Server;
+
+if (isHttpsConfigured) {
+  try {
+    const privateKey = fs.readFileSync(sslKeyPath!, 'utf8');
+    const certificate = fs.readFileSync(sslCertPath!, 'utf8');
+    const credentials = { key: privateKey, cert: certificate };
+    server = https.createServer(credentials, app);
+    console.log('SSL configuration loaded successfully. Initializing HTTPS server.');
+  } catch (error) {
+    console.error('Failed to load SSL certificates. Falling back to HTTP server.', error);
+    server = http.createServer(app);
+  }
+} else {
+  console.log('SSL paths not configured or certificates not found. Initializing HTTP server.');
+  server = http.createServer(app);
+}
+
 const io = new Server(server, {
   cors: {
     origin: '*',
@@ -414,7 +444,8 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(frontendDistPath, 'index.html'));
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || (isHttpsConfigured ? 443 : 5000);
 server.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+  const protocol = isHttpsConfigured ? 'HTTPS' : 'HTTP';
+  console.log(`${protocol} Server listening on port ${PORT}`);
 });
